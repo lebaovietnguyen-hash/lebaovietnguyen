@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>汇率风险净溢出网络（文献结构化拟合版）</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; }
+    .canvas-wrapper{
+      position: relative;
+      background:#020617;
+      border-radius:16px;
+      box-shadow:0 20px 25px -5px rgba(0,0,0,.3),0 10px 10px -5px rgba(0,0,0,.2);
+      overflow:hidden;
+      height:800px;
+    }
+    canvas{ display:block; cursor:default; }
+
+    .control-panel{
+      position:absolute; top:24px; left:24px; z-index:30;
+      background:rgba(255,255,255,.95);
+      backdrop-filter: blur(8px);
+      border:1px solid #e2e8f0;
+      border-radius:9999px;
+      box-shadow:0 4px 6px -1px rgba(0,0,0,.1);
+      width:48px; height:48px; overflow:hidden;
+      transition: all .5s cubic-bezier(0.2,0.8,0.2,1);
+      cursor:pointer;
+    }
+    .control-panel.expanded{
+      width: 320px;
+      height:auto;
+      max-height: 520px;
+      border-radius: 16px;
+      cursor: default;
+      background: rgba(255,255,255,.98);
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -2px rgba(0,0,0,.05);
+    }
+    .panel-icon{
+      position:absolute; top:0; left:0;
+      width:48px; height:48px;
+      display:flex; align-items:center; justify-content:center;
+      color:#475569; transition:opacity .3s;
+    }
+    .control-panel.expanded .panel-icon{ opacity:0; pointer-events:none; }
+    .panel-content{
+      padding: 18px 18px 16px 18px;
+      opacity:0; pointer-events:none;
+      width: 320px;
+      transition: opacity .3s ease-in-out;
+      transition-delay: .1s;
+    }
+    .control-panel.expanded .panel-content{ opacity:1; pointer-events:auto; }
+
+    .pulse-ring{
+      position:absolute; top:0; left:0; right:0; bottom:0;
+      border-radius:9999px;
+      box-shadow:0 0 0 0 rgba(59,130,246,.7);
+      animation:pulse-blue 2s infinite;
+    }
+    .control-panel.expanded .pulse-ring{ display:none; }
+
+    @keyframes pulse-blue{
+      0%{ transform:scale(.95); box-shadow:0 0 0 0 rgba(59,130,246,.7); }
+      70%{ transform:scale(1); box-shadow:0 0 0 10px rgba(59,130,246,0); }
+      100%{ transform:scale(.95); box-shadow:0 0 0 0 rgba(59,130,246,0); }
+    }
+  </style>
+</head>
+
+<body class="p-4 min-h-screen flex flex-col items-center">
+  <div class="w-full max-w-7xl space-y-6">
+    <div class="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+      <div>
+        <div class="text-xl font-bold text-slate-900">汇率风险净溢出网络</div>
+        <div class="text-sm text-slate-500 mt-1">
+          边表示“成对净溢出”(Net spillover)：仅保留一对货币之间更强的一侧方向，避免双向重复绘制。
+        </div>
+      </div>
+
+      <div class="mt-4 md:mt-0 flex gap-6 text-base">
+        <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-red-500 mr-2 shadow-sm border border-white/20"></span>亚太 (AP)</div>
+        <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-blue-500 mr-2 shadow-sm border border-white/20"></span>欧美 (EA)</div>
+        <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-gray-400 mr-2 shadow-sm border border-white/20"></span>其他 (OT)</div>
+      </div>
+    </div>
+
+    <div class="relative group">
+      <div id="controlPanel" class="control-panel">
+        <div class="pulse-ring"></div>
+        <div class="panel-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </div>
+
+        <div class="panel-content">
+          <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
+            <h3 class="font-bold text-slate-800">视图控制</h3>
+            <span class="text-[10px] text-slate-400">自动收起 (3s)</span>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-2">情景切换</label>
+            <select id="regimeSelect" class="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm">
+              <option value="allSample">全样本（结构拟合）</option>
+              <option value="post811" selected>“8·11”后（结构拟合）</option>
+            </select>
+            <p class="text-xs text-slate-500 mt-2 leading-tight">
+              用于呈现文献描述的结构性变化：人民币中心性上升、亚太群组相对增强。
+            </p>
+          </div>
+
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-bold text-slate-700 uppercase">样本口径</label>
+              <input type="checkbox" id="includeExcluded" class="accent-blue-600 w-4 h-4 cursor-pointer">
+            </div>
+            <p class="text-xs text-slate-500 leading-tight">
+              默认遵循文献的“剔除缺失样本”口径（TWD、ILS、MYR、IDR）。勾选后把它们加回来，图更热闹但更不严谨。
+            </p>
+          </div>
+
+          <div class="mb-5">
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-2">风险过滤阈值 (0-1.0)</label>
+            <input type="range" id="thresholdSlider" min="0" max="1" step="0.05" value="0.25" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+            <div class="flex justify-between text-xs text-slate-500 mt-2">
+              <span>显示细节</span>
+              <span id="thresholdValue" class="font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-bold">0.25</span>
+              <span>只看骨干</span>
+            </div>
+          </div>
+
+          <div class="mb-5">
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-2">粒子流动控制</label>
+            <button id="particleToggleBtn" type="button" class="w-full px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition">
+              启动粒子流动
+            </button>
+            <p class="text-xs text-slate-500 mt-2 leading-tight">
+              粒子沿“净溢出方向”流动：从净溢出方指向净溢入方。
+            </p>
+          </div>
+
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-bold text-slate-700 uppercase">全局流动演示</label>
+              <input type="checkbox" id="globalFlowToggle" class="accent-blue-600 w-4 h-4 cursor-pointer">
+            </div>
+            <p class="text-xs text-slate-500 leading-tight">
+              开启后，不悬停也会展示阈值以上骨干边的粒子流动。
+            </p>
+          </div>
+
+          <div class="text-sm text-slate-600 border-t border-slate-200 pt-3 mt-2">
+            <p class="mb-2 font-semibold">图例说明：</p>
+            <ul class="list-disc list-inside space-y-1 text-xs">
+              <li><strong>边方向</strong>：成对净溢出方向（更强的一侧）。</li>
+              <li><strong>边粗细 + 粒子密度</strong>：净溢出强度（归一化到 0-1）。</li>
+              <li><strong>节点大小</strong>：PageRank 中心性（用于拟合文献的网络中心性口径）。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="canvas-wrapper w-full" id="container">
+        <canvas id="vizCanvas"></canvas>
+      </div>
+
+      <div id="nodeCard" class="absolute hidden pointer-events-none bg-white/95 backdrop-blur border border-slate-200 p-5 rounded-lg shadow-2xl w-80 z-20 transition-all duration-200 transform scale-95 opacity-0">
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+          <h3 id="cardTitle" class="font-bold text-xl text-slate-800">USD</h3>
+          <span id="cardGroup" class="text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700">欧美</span>
+        </div>
+
+        <div class="space-y-3 text-sm">
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">总溢出 (To):</span>
+            <div class="flex items-center">
+              <div class="w-16 h-1.5 bg-slate-100 rounded-full mr-2 overflow-hidden">
+                <div id="barOut" class="h-full bg-red-500" style="width: 0%"></div>
+              </div>
+              <span id="cardOut" class="font-mono font-bold text-red-600 w-14 text-right">0.0</span>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">总溢入 (From):</span>
+            <div class="flex items-center">
+              <div class="w-16 h-1.5 bg-slate-100 rounded-full mr-2 overflow-hidden">
+                <div id="barIn" class="h-full bg-green-500" style="width: 0%"></div>
+              </div>
+              <span id="cardIn" class="font-mono font-bold text-green-600 w-14 text-right">0.0</span>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center pt-2 border-t border-slate-50/50">
+            <span class="text-slate-500">净溢出 (Net):</span>
+            <span id="cardNet" class="font-mono font-bold text-lg text-blue-600">+0.0</span>
+          </div>
+
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">PageRank:</span>
+            <span id="cardPR" class="font-mono font-semibold text-slate-700">0.000</span>
+          </div>
+
+          <div class="mt-2 text-xs text-slate-400 italic space-y-1">
+            <div>主要输出到: <span id="cardTargetsOut" class="text-slate-600">--</span></div>
+            <div>主要输入来自: <span id="cardSourcesIn" class="text-slate-600">--</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+  const canvas = document.getElementById('vizCanvas');
+  const ctx = canvas.getContext('2d');
+  const container = document.getElementById('container');
+
+  const slider = document.getElementById('thresholdSlider');
+  const thresholdValueSpan = document.getElementById('thresholdValue');
+  const globalFlowToggle = document.getElementById('globalFlowToggle');
+  const particleToggleBtn = document.getElementById('particleToggleBtn');
+  const regimeSelect = document.getElementById('regimeSelect');
+  const includeExcluded = document.getElementById('includeExcluded');
+
+  // Control Panel
+  const controlPanel = document.getElementById('controlPanel');
+  let collapseTimer;
+
+  function expandPanel(){
+    controlPanel.classList.add('expanded');
+    clearTimeout(collapseTimer);
+  }
+  function scheduleCollapse(){
+    clearTimeout(collapseTimer);
+    collapseTimer = setTimeout(() => controlPanel.classList.remove('expanded'), 3000);
+  }
+  controlPanel.addEventListener('click', expandPanel);
+  controlPanel.addEventListener('mouseenter', expandPanel);
+  controlPanel.addEventListener('mouseleave', scheduleCollapse);
+
+  // Tooltip
+  const nodeCard = document.getElementById('nodeCard');
+  const cardTitle = document.getElementById('cardTitle');
+  const cardGroup = document.getElementById('cardGroup');
+  const cardOut = document.getElementById('cardOut');
+  const cardIn = document.getElementById('cardIn');
+  const cardNet = document.getElementById('cardNet');
+  const cardPR = document.getElementById('cardPR');
+  const cardTargetsOut = document.getElementById('cardTargetsOut');
+  const cardSourcesIn = document.getElementById('cardSourcesIn');
+  const barOut = document.getElementById('barOut');
+  const barIn = document.getElementById('barIn');
+
+  let width, height, centerX, centerY, radius;
+  let nodes = [];
+  let links = [];           // net links only
+  let rawLinks = [];        // raw directional links (for internal net construction)
+  let particles = [];
+
+  let hoveredNode = null;
+  let threshold = 0.25;
+  let isGlobalFlow = false;
+  let isParticleRunning = false;
+  let rafId = null;
+
+  // Defaults
+  let regime = 'post811';
+  let followPaperSample = true;
+
+  // ------------------------------------------------------------
+  // Deterministic RNG: makes the same "synthetic network" reproducible.
+  // Human beings love reproducibility until it breaks their narrative.
+  // ------------------------------------------------------------
+  function makeRng(seed){
+    let x = seed >>> 0;
+    return function(){
+      x ^= x << 13; x >>>= 0;
+      x ^= x >> 17; x >>>= 0;
+      x ^= x << 5;  x >>>= 0;
+      return (x >>> 0) / 4294967296;
+    };
+  }
+  let rng = makeRng(20250811);
+
+  const currenciesFull = [
+    { id:'CNY', name:'人民币', group:1, baseStrength:1.25 },
+    { id:'JPY', name:'日元', group:1, baseStrength:0.90 },
+    { id:'KRW', name:'韩元', group:1, baseStrength:1.00 },
+    { id:'AUD', name:'澳大利亚元', group:1, baseStrength:1.15 },
+    { id:'NZD', name:'新西兰元', group:1, baseStrength:0.95 },
+    { id:'SGD', name:'新加坡元', group:1, baseStrength:1.05 },
+    { id:'INR', name:'卢比', group:1, baseStrength:0.70 },
+    { id:'IDR', name:'印尼盾', group:1, baseStrength:0.60 }, // 文献实证剔除
+    { id:'MYR', name:'林吉特', group:1, baseStrength:0.60 }, // 文献实证剔除
+    { id:'TWD', name:'新台币', group:1, baseStrength:0.70 }, // 文献实证剔除
+    { id:'USD', name:'美元', group:2, baseStrength:1.90 },
+    { id:'EUR', name:'欧元', group:2, baseStrength:1.70 },
+    { id:'GBP', name:'英镑', group:2, baseStrength:1.30 },
+    { id:'CAD', name:'加元', group:2, baseStrength:1.10 },
+    { id:'CHF', name:'瑞士法郎', group:2, baseStrength:0.90 },
+    { id:'RUB', name:'卢布', group:3, baseStrength:0.70 },
+    { id:'BRL', name:'雷亚尔', group:3, baseStrength:0.80 },
+    { id:'ZAR', name:'兰特', group:3, baseStrength:0.70 },
+    { id:'TRY', name:'里拉', group:3, baseStrength:0.60 },
+    { id:'ILS', name:'谢克尔', group:3, baseStrength:0.50 }  // 文献实证剔除
+  ];
+  const excludedIds = new Set(['TWD','ILS','MYR','IDR']);
+
+  function getGroupColor(g){
+    if (g === 1) return '#ef4444';
+    if (g === 2) return '#3b82f6';
+    return '#94a3b8';
+  }
+
+  // Arrowhead (quadratic curve)
+  function drawArrowheadQuadratic(sx, sy, cpx, cpy, tx, ty, lineWidth, color, alpha){
+    const t = 0.96, invT = 1 - t;
+    const x = invT*invT*sx + 2*invT*t*cpx + t*t*tx;
+    const y = invT*invT*sy + 2*invT*t*cpy + t*t*ty;
+
+    const dx = 2*invT*(cpx - sx) + 2*t*(tx - cpx);
+    const dy = 2*invT*(cpy - sy) + 2*t*(ty - cpy);
+    const ang = Math.atan2(dy, dx);
+
+    const size = 5 + lineWidth * 1.1;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-size, size*0.65);
+    ctx.lineTo(-size, -size*0.65);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.globalAlpha = Math.min(1.0, alpha + 0.15);
+    ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1.0;
+  }
+
+  // ------------------------------------------------------------
+  // Core: build synthetic "directional spillover" then convert to "pairwise net spillover network"
+  // ------------------------------------------------------------
+  function initData(){
+    // Regime params for group-level shifts
+    const REGIME_CFG = {
+      allSample: {
+        apIntra: 0.22, eaIntra: 0.18, otIntra: 0.14,
+        apToOthers: 0.10, eaToOthers: 0.12, otToOthers: 0.08,
+        eaToAp: 0.06, apToEa: 0.05,
+        cnyOut: 0.06, cnyIn: 0.12
+      },
+      post811: {
+        apIntra: 0.26, eaIntra: 0.15, otIntra: 0.14,
+        apToOthers: 0.14, eaToOthers: 0.10, otToOthers: 0.08,
+        eaToAp: 0.03, apToEa: 0.06,
+        cnyOut: 0.16, cnyIn: 0.08
+      }
+    };
+    const cfg = REGIME_CFG[regime] || REGIME_CFG.post811;
+
+    // Long-run role priors (net transmitters & safe havens)
+    const HUB_OUT = { USD:0.38, EUR:0.28, AUD:0.18, SGD:0.16, NZD:0.12 };
+    const SAFE_HAVEN = new Set(['JPY','CHF']);
+    const SAFE_IN_BOOST = 0.14;
+    const SAFE_OUT_PENALTY = 0.18;
+
+    // Backbone priors (structure-consistent, not a claimed empirical matrix)
+    const EDGE_PRIOR = {
+      'USD->CNY':0.22, 'EUR->CNY':0.16, 'JPY->CNY':0.08, 'SGD->CNY':0.07, 'KRW->CNY':0.06,
+      'CNY->KRW':0.15, 'CNY->SGD':0.14, 'CNY->TWD':0.12, 'CNY->MYR':0.10, 'CNY->IDR':0.09,
+      'CNY->AUD':0.09, 'CNY->NZD':0.07,
+      'USD->JPY':0.18, 'EUR->JPY':0.12, 'GBP->JPY':0.10, 'CHF->JPY':0.08,
+      'JPY->KRW':0.05, 'JPY->CNY':0.05, 'JPY->SGD':0.04,
+      'USD->EUR':0.10, 'EUR->USD':0.10, 'USD->GBP':0.09, 'EUR->GBP':0.08,
+      'USD->AUD':0.08, 'USD->CAD':0.07, 'EUR->CHF':0.07
+    };
+
+    const inSample = currenciesFull.filter(c => followPaperSample ? !excludedIds.has(c.id) : true);
+
+    nodes = inSample.map((c, i) => ({
+      ...c,
+      index: i,
+      x: 0, y: 0,
+      r: 12,
+      totalOut: 0,
+      totalIn: 0,
+      net: 0,
+      pagerank: 0
+    }));
+
+    function key(src, tgt){ return `${src.id}->${tgt.id}`; }
+
+    function regionBoost(src, tgt){
+      if (src.group === tgt.group){
+        if (src.group === 1) return cfg.apIntra;
+        if (src.group === 2) return cfg.eaIntra;
+        return cfg.otIntra;
+      }
+      let v = 0.02;
+      if (src.group === 1) v += cfg.apToOthers;
+      else if (src.group === 2) v += cfg.eaToOthers;
+      else v += cfg.otToOthers;
+
+      if (src.group === 2 && tgt.group === 1) v += cfg.eaToAp;
+      if (src.group === 1 && tgt.group === 2) v += cfg.apToEa;
+      return v;
+    }
+
+    function baseWeight(src, tgt){
+      let w = 0.03;
+
+      // Group structure
+      w += regionBoost(src, tgt);
+
+      // Output-hub priors
+      w += (HUB_OUT[src.id] || 0) * 0.55;
+
+      // RMB structural change
+      if (src.id === 'CNY') w += cfg.cnyOut;
+      if (tgt.id === 'CNY') w += cfg.cnyIn;
+
+      // Safe haven: bias toward receiving spillovers
+      if (SAFE_HAVEN.has(tgt.id)) w += SAFE_IN_BOOST;
+      if (SAFE_HAVEN.has(src.id)) w -= SAFE_OUT_PENALTY;
+
+      // Pair backbone
+      w += EDGE_PRIOR[key(src, tgt)] || 0;
+
+      // Mild deterministic noise
+      w += (rng() - 0.5) * 0.06;
+
+      return Math.max(0.01, Math.min(1.0, w));
+    }
+
+    // 1) Raw directional matrix
+    rawLinks = [];
+    nodes.forEach(src => {
+      nodes.forEach(tgt => {
+        if (src === tgt) return;
+        rawLinks.push({ source: src, target: tgt, w: baseWeight(src, tgt) });
+      });
+    });
+
+    // Helper: access raw weight
+    const rawMap = new Map();
+    rawLinks.forEach(l => rawMap.set(`${l.source.id}|${l.target.id}`, l.w));
+
+    // 2) Convert to pairwise net network: keep only the stronger direction per unordered pair
+    links = [];
+    for (let i = 0; i < nodes.length; i++){
+      for (let j = i+1; j < nodes.length; j++){
+        const a = nodes[i], b = nodes[j];
+        const wab = rawMap.get(`${a.id}|${b.id}`) || 0;
+        const wba = rawMap.get(`${b.id}|${a.id}`) || 0;
+
+        const netAB = Math.max(0, wab - wba);
+        const netBA = Math.max(0, wba - wab);
+
+        if (netAB > 0){
+          links.push({ source: a, target: b, weight: netAB });
+        } else if (netBA > 0){
+          links.push({ source: b, target: a, weight: netBA });
+        } else {
+          // perfectly tied; ignore to avoid meaningless bidirectional noise
+        }
+      }
+    }
+
+    // 3) Normalize weights to [0,1]
+    const maxW = Math.max(0.0001, ...links.map(l => l.weight));
+    links.forEach(l => l.weight = l.weight / maxW);
+
+    // 4) Totals and net spillover (To-From)
+    recomputeTotals();
+
+    // 5) PageRank (center性拟合口径)
+    computePageRank(0.85, 60);
+
+    // Node radius from PageRank (stable and network-consistent)
+    const prMax = Math.max(...nodes.map(n => n.pagerank));
+    nodes.forEach(n => {
+      const t = prMax > 0 ? (n.pagerank / prMax) : 0;
+      n.r = 10 + t * 26;
+    });
+  }
+
+  function recomputeTotals(){
+    nodes.forEach(n => { n.totalOut = 0; n.totalIn = 0; n.net = 0; });
+    links.forEach(l => {
+      l.source.totalOut += l.weight;
+      l.target.totalIn += l.weight;
+    });
+    nodes.forEach(n => n.net = n.totalOut - n.totalIn);
+  }
+
+  function computePageRank(damping=0.85, iters=50){
+    const N = nodes.length;
+    if (N === 0) return;
+
+    const idx = new Map(nodes.map((n,i) => [n.id, i]));
+    const outSum = Array(N).fill(0);
+    links.forEach(l => {
+      const i = idx.get(l.source.id);
+      outSum[i] += l.weight;
+    });
+
+    let pr = Array(N).fill(1 / N);
+
+    for (let t = 0; t < iters; t++){
+      const next = Array(N).fill((1 - damping) / N);
+
+      // Dangling mass
+      let dangling = 0;
+      for (let i = 0; i < N; i++){
+        if (outSum[i] === 0) dangling += pr[i];
+      }
+      const danglingShare = damping * dangling / N;
+      for (let i = 0; i < N; i++) next[i] += danglingShare;
+
+      links.forEach(l => {
+        const i = idx.get(l.source.id);
+        const j = idx.get(l.target.id);
+        if (outSum[i] > 0){
+          next[j] += damping * pr[i] * (l.weight / outSum[i]);
+        }
+      });
+
+      // Normalize (numerical stability)
+      const s = next.reduce((a,b) => a+b, 0);
+      pr = next.map(v => v / s);
+    }
+
+    nodes.forEach((n, i) => n.pagerank = pr[i]);
+  }
+
+  // Particle system
+  class Particle{
+    constructor(link){
+      this.link = link;
+      this.progress = rng();
+      this.reset();
+    }
+    reset(){
+      this.speed = 0.002 + (this.link.weight * 0.005) + (rng() * 0.002);
+    }
+    update(){
+      this.progress += this.speed;
+      if (this.progress >= 1) this.progress = 0;
+    }
+    draw(ctx, isHoveredLink, isGlobal){
+      const sx = this.link.source.x, sy = this.link.source.y;
+      const tx = this.link.target.x, ty = this.link.target.y;
+
+      const midX = (sx + tx) / 2, midY = (sy + ty) / 2;
+      const bend = 0.2;
+      const cpX = centerX * bend + midX * (1-bend);
+      const cpY = centerY * bend + midY * (1-bend);
+
+      const t = this.progress, invT = 1 - t;
+      const x = invT*invT*sx + 2*invT*t*cpX + t*t*tx;
+      const y = invT*invT*sy + 2*invT*t*cpY + t*t*ty;
+
+      ctx.beginPath();
+      let size = 1.4 + this.link.weight * 2.6;
+      if (isHoveredLink) size *= 1.2;
+      ctx.arc(x, y, size, 0, Math.PI*2);
+
+      if (isHoveredLink){
+        ctx.fillStyle = (this.link.source === hoveredNode) ? getGroupColor(this.link.source.group) : '#ffffff';
+        ctx.globalAlpha = 1.0;
+      } else if (isGlobal){
+        ctx.fillStyle = getGroupColor(this.link.source.group);
+        ctx.globalAlpha = 0.5 * this.link.weight;
+      }
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+    }
+  }
+
+  // Layout
+  function initLayout(){
+    const rect = container.getBoundingClientRect();
+    width = rect.width;
+    height = rect.height;
+
+    canvas.width = width * 2;
+    canvas.height = height * 2;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(2,2);
+
+    centerX = width / 2;
+    centerY = height / 2;
+    radius = Math.min(width, height) * 0.42;
+
+    const angleStep = (Math.PI * 2) / Math.max(1, nodes.length);
+
+    // Order by group then by PageRank to keep same-group clusters more visible
+    const ordered = [...nodes].sort((a,b) => (a.group - b.group) || (b.pagerank - a.pagerank));
+    ordered.forEach((n, i) => {
+      const angle = i * angleStep - Math.PI / 2;
+      n.x = centerX + radius * Math.cos(angle);
+      n.y = centerY + radius * Math.sin(angle);
+    });
+
+    // Particles only for stronger edges (visual sanity)
+    particles = [];
+    links.forEach(l => {
+      if (l.weight > 0.10){
+        const count = Math.floor(Math.pow(l.weight, 1.5) * 45);
+        for (let k = 0; k < count; k++) particles.push(new Particle(l));
+      }
+    });
+  }
+
+  // Draw
+  function drawFrame(ts){
+    ctx.clearRect(0,0,width,height);
+
+    // A) Links
+    links.forEach(l => {
+      let alpha = 0;
+
+      if (hoveredNode){
+        if (l.source === hoveredNode) alpha = Math.max(0.28, l.weight);
+        else if (l.target === hoveredNode) alpha = Math.max(0.12, l.weight * 0.55);
+        else alpha = 0.02;
+      } else {
+        if (l.weight > threshold){
+          alpha = (l.weight - threshold) / (1 - threshold) * 0.35;
+        }
+      }
+
+      if (alpha > 0.01){
+        const midX = (l.source.x + l.target.x) / 2;
+        const midY = (l.source.y + l.target.y) / 2;
+        const bend = 0.2;
+        const cpX = centerX * bend + midX * (1-bend);
+        const cpY = centerY * bend + midY * (1-bend);
+
+        ctx.beginPath();
+        ctx.moveTo(l.source.x, l.source.y);
+        ctx.quadraticCurveTo(cpX, cpY, l.target.x, l.target.y);
+
+        const color = getGroupColor(l.source.group);
+        const lw = Math.max(0.65, l.weight * 4.4);
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw;
+        ctx.globalAlpha = alpha;
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+
+        drawArrowheadQuadratic(l.source.x, l.source.y, cpX, cpY, l.target.x, l.target.y, lw, color, alpha);
+      }
+    });
+
+    // B) Particles
+    if (isParticleRunning){
+      particles.forEach(p => {
+        p.update();
+
+        let shouldDraw = false, isHoveredLink = false, isGlobalDraw = false;
+
+        if (hoveredNode){
+          if (p.link.source === hoveredNode || p.link.target === hoveredNode){
+            shouldDraw = true;
+            isHoveredLink = true;
+          }
+        } else {
+          if (isGlobalFlow && p.link.weight > threshold){
+            shouldDraw = true;
+            isGlobalDraw = true;
+          }
+        }
+
+        if (shouldDraw) p.draw(ctx, isHoveredLink, isGlobalDraw);
+      });
+    }
+
+    // C) Nodes
+    nodes.forEach(n => {
+      const isHovered = (n === hoveredNode);
+      const isRelated = hoveredNode && links.some(l =>
+        (l.source === hoveredNode && l.target === n) ||
+        (l.target === hoveredNode && l.source === n)
+      );
+
+      const pulse = isHovered ? (1 + 0.08 * Math.sin(ts / 160)) : 1;
+      const r = n.r * pulse;
+
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+
+      if (hoveredNode && !isHovered && !isRelated){
+        ctx.fillStyle = '#1e293b';
+        ctx.globalAlpha = 0.4;
+      } else {
+        ctx.fillStyle = getGroupColor(n.group);
+        ctx.globalAlpha = 1.0;
+      }
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+
+      if (isHovered){
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r + 8 + 4 * Math.sin(ts / 160), 0, Math.PI * 2);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.55;
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = getGroupColor(n.group);
+        ctx.shadowBlur = 22;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = isHovered ? 'bold 16px sans-serif' : '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.id, n.x, n.y);
+    });
+
+    const needLoop = isParticleRunning || hoveredNode;
+    if (needLoop) rafId = requestAnimationFrame(drawFrame);
+    else rafId = null;
+  }
+
+  function requestRedraw(){
+    if (!rafId) rafId = requestAnimationFrame(drawFrame);
+  }
+
+  // Tooltip
+  function updateTooltip(x, y){
+    if (!hoveredNode){
+      nodeCard.style.opacity = '0';
+      nodeCard.style.transform = 'scale(0.95)';
+      setTimeout(() => { if (!hoveredNode) nodeCard.style.display = 'none'; }, 200);
+      return;
+    }
+
+    nodeCard.style.display = 'block';
+    requestAnimationFrame(() => {
+      nodeCard.style.opacity = '1';
+      nodeCard.style.transform = 'scale(1)';
+    });
+
+    let left = x + 30, top = y + 20;
+    if (left + 340 > window.innerWidth) left = x - 360;
+    if (top + 280 > window.innerHeight) top = y - 280;
+
+    nodeCard.style.left = left + 'px';
+    nodeCard.style.top = top + 'px';
+
+    cardTitle.innerText = `${hoveredNode.name} (${hoveredNode.id})`;
+    cardGroup.innerText = hoveredNode.group === 1 ? '亚太' : (hoveredNode.group === 2 ? '欧美' : '其他');
+    cardGroup.className = `text-xs font-bold px-2 py-0.5 rounded ${hoveredNode.group===1 ? 'bg-red-100 text-red-700' : (hoveredNode.group===2 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700')}`;
+
+    cardOut.innerText = hoveredNode.totalOut.toFixed(3);
+    cardIn.innerText = hoveredNode.totalIn.toFixed(3);
+
+    const maxOut = Math.max(0.0001, ...nodes.map(n => n.totalOut));
+    const maxIn = Math.max(0.0001, ...nodes.map(n => n.totalIn));
+    barOut.style.width = Math.min(100, (hoveredNode.totalOut / maxOut) * 100) + '%';
+    barIn.style.width = Math.min(100, (hoveredNode.totalIn / maxIn) * 100) + '%';
+
+    const net = hoveredNode.net;
+    cardNet.innerText = (net > 0 ? '+' : '') + net.toFixed(3);
+    cardNet.className = `font-mono font-bold text-lg ${net > 0 ? 'text-blue-600' : 'text-green-600'}`;
+
+    cardPR.innerText = hoveredNode.pagerank.toFixed(4);
+
+    const targetsOut = links
+      .filter(l => l.source === hoveredNode)
+      .sort((a,b) => b.weight - a.weight)
+      .slice(0, 3)
+      .map(l => l.target.id)
+      .join(', ');
+
+    const sourcesIn = links
+      .filter(l => l.target === hoveredNode)
+      .sort((a,b) => b.weight - a.weight)
+      .slice(0, 3)
+      .map(l => l.source.id)
+      .join(', ');
+
+    cardTargetsOut.innerText = targetsOut || '无显著输出';
+    cardSourcesIn.innerText = sourcesIn || '无显著输入';
+  }
+
+  // Mouse
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mouseX = (e.clientX - rect.left) * (scaleX / 2);
+    const mouseY = (e.clientY - rect.top) * (scaleY / 2);
+
+    let found = null;
+    for (const n of nodes){
+      const dist = Math.sqrt((mouseX - n.x)**2 + (mouseY - n.y)**2);
+      if (dist < n.r + 10){ found = n; break; }
+    }
+
+    hoveredNode = found;
+    canvas.style.cursor = found ? 'pointer' : 'default';
+    updateTooltip(e.clientX, e.clientY);
+    requestRedraw();
+  });
+
+  // UI bindings
+  slider.addEventListener('input', e => {
+    threshold = parseFloat(e.target.value);
+    thresholdValueSpan.innerText = threshold.toFixed(2);
+    requestRedraw();
+  });
+
+  globalFlowToggle.addEventListener('change', e => {
+    isGlobalFlow = e.target.checked;
+    requestRedraw();
+  });
+
+  particleToggleBtn.addEventListener('click', () => {
+    isParticleRunning = !isParticleRunning;
+    particleToggleBtn.innerText = isParticleRunning ? '停止粒子流动' : '启动粒子流动';
+    particleToggleBtn.setAttribute('aria-pressed', String(isParticleRunning));
+    requestRedraw();
+  });
+
+  regimeSelect.addEventListener('change', e => {
+    regime = e.target.value;
+    hoveredNode = null;
+    rng = makeRng(regime === 'post811' ? 20250811 : 20240101); // stable but different per regime
+    initData();
+    initLayout();
+    requestRedraw();
+  });
+
+  includeExcluded.addEventListener('change', e => {
+    followPaperSample = !e.target.checked;
+    hoveredNode = null;
+    rng = makeRng(regime === 'post811' ? 20250811 : 20240101);
+    initData();
+    initLayout();
+    requestRedraw();
+  });
+
+  // Start
+  initData();
+  initLayout();
+  drawFrame(performance.now());
+  window.addEventListener('resize', () => { initLayout(); requestRedraw(); });
+
+</script>
+</body>
+</html>
